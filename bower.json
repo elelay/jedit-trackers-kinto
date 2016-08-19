@@ -1,0 +1,23 @@
+{
+  "name": "jedit-trackers",
+  "authors": [
+    "Eric Le Lay <kerik-sf@users.sf.net>"
+  ],
+  "description": "an offline-first tracker tracking UI",
+  "main": "trackers.html",
+  "license": "MIT",
+  "homepage": "http://jedit.org",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "datatables": "^1.10.12",
+    "lodash": "^4.15.0",
+    "moment": "^2.14.1"
+  }
+}
