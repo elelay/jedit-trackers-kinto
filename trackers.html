@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>jEdit Trackers</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <link rel="stylesheet" href="trackers.css">
+</head>
+<body>
+  <div class="container">
+    <h1><a href="#">jEdit Trackers</a>
+		<ul id="open-counters" class="list-inline counters">
+			<li><b>Open</b></li>
+			<li><button class="btn btn-default" data-tracker="bugs"><span class="count">0</span> bugs</button></li>
+			<li><button class="btn btn-default" data-tracker="plugin-bugs"><span class="count">0</span> plugin bugs</button></li>
+			<li><button class="btn btn-default" data-tracker="jeditlauncher-bugs"><span class="count">0</span> launcher bugs</button></li>
+			<li><button class="btn btn-default" data-tracker="patches"><span class="count">0</span> patches</button></li>
+			<li><button class="btn btn-default" data-tracker="plugin-patches"><span class="count">0</span> plugin patches</button></li>
+			<li><button class="btn btn-default" data-tracker="feature-requests"><span class="count">0</span> feature requests</button></li>
+			<li><button class="btn btn-default" data-tracker="plugin-feature-requests"><span class="count">0</span> plugin feature requests</button></li>
+		</ul>
+		<ul class="list-inline counters">
+			<li><b>Missed</b></li>
+			<li><button id="missed" class="btn btn-default"><span id="missed-count"> </span> missed</button></li>
+		</ul>
+    </h1>
+    <div class="row">
+    	
+    </div>
+    <form class="form-inline" id="form">
+      <div class="form-group">
+        <input id="search" class="form-control" type="text" name="search" placeholder="Type search terms">
+        <input class="btn btn-primary" type="submit" value="Search">
+      </div>
+    </form>
+    <hr>
+    <p id="match-count-p" class="hidden"><span id="match-count">0</span> matches.</p>
+    <table id="tickets" class="table">
+		<thead>
+			<tr>
+				<th data-field="ticket_num" data-order="+" data-order-as="num"># <span class="glyphicon"></span></th>
+				<th data-field="tracker_label">Tracker <span class="glyphicon"></span></th>
+				<th data-field="summary">Summary <span class="glyphicon"></span></th>
+				<th data-field="status">Status <span class="glyphicon"></span></th>
+				<th data-field="created_date">Submitted <span class="glyphicon"></span></th>
+				<th data-field="reported_by">By <span class="glyphicon"></span></th>
+				<th data-field="assigned_to">Assigned <span class="glyphicon"></span></th>
+				<td id="clear-sorting">clear <span class="glyphicon glyphicon-sort"></span></th>
+			</tr>
+		</thead>
+		<tbody id="tickets-body">
+		</tbody>
+	</table>
+    <template id="ticket-tpl">
+    <tr>
+	<th data-field="ticket_num">#</th>
+	<td data-field="tracker_label">Tracker</td>
+	<td data-field="summary">Summary</td>
+	<td data-field="status">Status</td>
+	<td data-field="created_date">Submitted</td>
+	<td data-field="reported_by">By</td>
+	<td data-field="assigned_to">Assigned</td>
+    </tr>
+    </template>
+    <template id="full-ticket-tpl">
+    <div class="full row">
+    	<pre data-field="description"></pre>
+    </div>
+    </template>
+    <hr>
+	<div class="row">
+	  <div class="col-md-6">
+		<button id="sync" class="btn">Synchronize</button>
+	  </div>
+	  <div class="col-md-6">
+		<textarea id="results" class="form-control col-md-6" rows="10"></textarea>
+	  </div>
+	</div>
+  </div>
+  <script src="bower_components/moment/moment.js"></script>
+  <script src="bower_components/lodash/lodash.js"></script>
+  <script src="kinto.js"></script>
+  <script src="trackers.js"></script>
+</body>
+</html>

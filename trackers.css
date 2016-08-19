@@ -1,0 +1,17 @@
+.counters {
+	font-size: 12px;
+	display:inline-block;
+	margin-left:1em;
+}
+
+.counters .btn.active {
+	background: #8fc4ff;
+}
+
+th[data-order = "+"] .glyphicon:before {
+	content:"\e155"
+}
+
+th[data-order = "-"] .glyphicon:before {
+	content:"\e156"
+}
