@@ -1,10 +1,13 @@
 String.prototype.startsWith = String.prototype.startsWith || function(x) {
     return this.indexOf(x) === 0;
 };
+String.prototype.contains = String.prototype.contains || function(x) {
+    return this.indexOf(x) >= 0;
+};
 
 const thenLog = console.log.bind(console);
-var db, stats, tickets;
-
+var db, stats, tickets, oldTickets;
+var table;
 const nopSchema = {
     generate: function() {
         throw new Error("can't generate keys");
@@ -17,22 +20,19 @@ const nopSchema = {
 function main() {
     db = new Kinto();
     tickets = db.collection("tickets");
+    oldTickets = db.collection("oldTickets");
     stats = db.collection("stats", {
         idSchema: nopSchema
     });
 
     var state;
-    
-    function defaultState(){
-    	return {
-			sort: [{
-				field: "ticket_num",
-				as: "num",
-				order: "+"
-			}],
-			filter: "",
-			activeCounters: {}
-		};
+
+    function defaultState() {
+        return {
+            //        	sort: [[1,"asc"]],
+            filter: "",
+            activeCounters: {}
+        };
     }
 
     function encodeState(state) {
@@ -40,14 +40,7 @@ function main() {
     }
 
     function applySort(state) {
-        _.each(getTicketDisplayFields(), function(th) {
-            th.dataset.order = "";
-        });
-        _.each(state.sort, function(sort) {
-        		console.log("apply", sort);
-            var head = document.querySelector("#tickets thead *[data-field = '" + sort.field + "']");
-            head.dataset.order = sort.order;
-        });
+        table.order(state.sort).draw();
     }
 
     function applyCounters(state) {
@@ -61,7 +54,7 @@ function main() {
     }
 
     function applyState(state) {
-        applySort(state);
+        //applySort(state);
         applyCounters(state);
         applyFilter(state);
         search();
@@ -70,6 +63,32 @@ function main() {
     function saveState(state) {
         window.history.pushState(state, "jEdit Trackers", encodeState(state));
     }
+
+
+    var fields = _.map(getTicketDisplayFields(), function(th) {
+        return {
+            data: th.dataset.field
+        };
+    });
+    fields.unshift({
+        "className": "details-control",
+        "orderable": false,
+        "data": null,
+        "defaultContent": ""
+    });
+    console.log("fields", fields);
+
+    table = new $("#tickets").DataTable({
+        data: [],
+        columns: fields,
+        order: [
+            [1, 'asc']
+        ],
+        searching: false,
+        paging: false,
+        info: false,
+        autoWidth: false
+    });
 
     document.getElementById("form")
         .addEventListener("submit", function(event) {
@@ -123,21 +142,30 @@ function main() {
         if (!filter && !activeTrackers.length) {
             results = Promise.resolve([]);
         } else if (filter.match(/^#\d+/)) {
-            results = tickets.list({
+            var byNum = {
                 filters: {
                     ticket_num: parseInt(filter.substring(1))
                 }
-            }).then(function(res) {
-                return res.data.filter(filterByTrackers(activeTrackers));
+            };
+
+            results = Promise.all([tickets.list(byNum), activeTrackers.length ? Promise.resolve({
+                data: []
+            }) : oldTickets.list(byNum)]).then(function(multiRes) {
+                return _.flatMap(multiRes, function(res) {
+                    return res.data.filter(filterByTrackers(activeTrackers));
+                });
             });
         } else {
-            results = tickets.list()
-                .then(function(res) {
-                    console.log(res.data[0]);
-                    // Filter tickets according to their summary
-                    var match = res.data.filter(filterByTrackers(activeTrackers)).filter(filterBySummary(filter));
-                    console.log("match", filter, match.length);
-                    return match;
+            results = Promise.all([tickets.list(), activeTrackers.length ? Promise.resolve({
+                    data: []
+                }) : oldTickets.list()])
+                .then(function(multiRes) {
+                    return _.flatMap(multiRes, function(res) {
+                        // Filter tickets according to their summary
+                        var match = res.data.filter(filterByTrackers(activeTrackers)).filter(filterBySummary(filter));
+                        console.log("match", filter, match.length);
+                        return match;
+                    });
                 });
         }
         results.then(render)
@@ -167,134 +195,198 @@ function main() {
             })
     }
 
-    function handleConflicts(conflicts) {
+    function handleConflicts(coll, conflicts) {
         return Promise.all(conflicts.map(function(conflict) {
-                return tickets.resolve(conflict, conflict.remote);
+                return coll.resolve(conflict, conflict.remote);
             }))
             .then(function() {
-                tickets.sync(syncOptions);
+                coll.sync(syncOptions);
+            });
+    }
+
+    function synchronize(coll) {
+        return coll.sync(syncOptions)
+            .then(function(res) {
+                // remove details
+                res.created = res.created.length;
+                res.updated = res.updated.length;
+
+                document.getElementById("results").value = document.getElementById("results").value + "\n\n" + JSON.stringify(res, null, 2);
+                if (res.conflicts.length) {
+                    return handleConflicts(coll, res.conflicts);
+                } else {
+                    return index(coll);
+                }
+                return res;
+            })
+            .catch(function(err) {
+                console.error(err);
             });
     }
 
     document.getElementById("sync")
-        .addEventListener("click", function(event) {
-            event.preventDefault();
-            tickets.sync(syncOptions)
-                .then(function(res) {
-                    document.getElementById("results").value = JSON.stringify(res, null, 2);
-                    if (res.conflicts.length) {
-                        return handleConflicts(res.conflicts);
-                    } else {
-                        return index();
-                    }
-                    return res;
-                })
-                .catch(function(err) {
-                    console.error(err);
-                });
+        .addEventListener("click", syncClick);
+    document.getElementById("sync-new")
+        .addEventListener("click", syncClick);
+
+    function syncClick() {
+    	console.log("syncClick");
+        function enableSync(enabled) {
+            _.each(document.querySelectorAll(".sync"), function(btn) {
+                if (enabled) {
+                    btn.setAttribute("disabled", "disabled");
+                } else {
+                    btn.removeAttribute("disabled");
+                }
+            });
+        }
+        enableSync(false);
+        stats.get("counters.oldTickets").then(function(res) {
+            var sync = [synchronize(tickets)];
+            if (res.data.length) {
+                sync.push(synchronize(oldTickets));
+            }
+            return Promise.all(sync).then(function() {
+                document.getElementById("new-msg").classList.add("hidden");
+                enableSync(false);
+            });
         });
+    }
 
     function getTicketDisplayFields() {
         return document.querySelectorAll("#tickets thead th[data-field]");
     }
 
-    function getSortFunction(useDataset) {
-        var sortFields = _.map(getTicketDisplayFields(), function(th) {
-            var field = th.dataset.field;
-            var order = th.dataset.order;
-            var as = th.dataset.orderAs;
-            console.log("sort", field, order, useDataset ? "dataset" : "");
-            var getVal;
-            if (as === "num") {
-                getVal = useDataset ? function(t) {
-                    return parseFloat(t.dataset[field]);
-                } : function(t) {
-                    return parseFloat(t[field]);
-                };
-            } else {
-                getVal = useDataset ? function(t) {
-                    return t.dataset[field];
-                } : function(t) {
-                    return t[field];
-                };
-            }
-            if (order === "+") {
-                return function(t1, t2) {
-                    var v1 = getVal(t1),
-                        v2 = getVal(t2);
-                    return (v1 > v2) ? 1 : ((v1 === v2) ? 0 : -1);
-                };
-            } else if (order === "-") {
-                return function(t1, t2) {
-                    var v1 = getVal(t1),
-                        v2 = getVal(t2);
-                    return (v1 > v2) ? -1 : ((v1 === v2) ? 0 : 1);
-                };
-            } else {
-                return function() {
-                    return 0;
-                };
-            }
-        });
-        return function(t1, t2) {
-            return sortFields.reduce(function(acc, sortF) {
-                if (acc !== 0) {
-                    return acc;
-                }
-                var cmp = sortF(t1, t2);
-                if (cmp === -1 || cmp === 1) {
-                    return cmp;
-                }
-                return acc;
-            }, 0);
-        };
+    function getValue(obj, path) {
+        var step = path.shift();
+        var value = obj[step];
+        if (path.length) {
+            value = value && getValue(value, path);
+        }
+        return value;
     }
 
-    function sortTickets() {
-        var body = document.getElementById("tickets-body");
-        var tickets = _.map(document.querySelectorAll("#tickets-body tr"), function(tr) {
-            return body.removeChild(tr);
+    function getOrComputeValue(obj, field) {
+        switch (field) {
+            case "__resolution":
+                var s = obj["status"] || "";
+                return (s.contains("-") && s.substring(s.lastIndexOf("-") + 1)) || "";
+            default:
+                return getValue(obj, field.split(/\./));
+        }
+    }
+
+    function fileSize(value) {
+        if (value < 1000) {
+            return value + "o";
+        }
+        if (value < 1000000) {
+            return _.round(value / 1024, 1) + "Kio";
+        }
+        return _.round(value / 1024 / 1024, 1) + "Mio";
+    }
+
+    function renderFields(clone, obj) {
+        _.each(clone.querySelectorAll("*[data-field]"), function(cell) {
+            var field = cell.dataset.field;
+            var value = getOrComputeValue(obj, field) || "";
+            var multi = cell.dataset.ml;
+            if (multi) {
+                value = value.replace(/\n/g, "<br>");
+                cell.innerHTML = value;
+            } else {
+                cell.textContent = value;
+            }
         });
-        tickets.sort(getSortFunction(true));
-        console.log(tickets);
-        tickets.forEach(function(ticket) {
-            body.appendChild(ticket);
+    }
+
+    function renderAttachments(clone, obj) {
+        obj.attachments.forEach(function(attach) {
+            var p = document.createElement("p");
+            var a = document.createElement("a");
+            var file = attach.url.substring(attach.url.lastIndexOf("/") + 1);
+            var size = fileSize(attach.bytes);
+            a.setAttribute("href", attach.url);
+            a.textContent = file + " (" + size + ")";
+            p.appendChild(a);
+            clone.querySelector(".attachments").appendChild(p);
         });
     }
 
 
-    function renderTicket(ticket) {
+    function renderDiscussion(parent, ticket) {
+        if (ticket.discussion_thread.posts.length) {
+            var tpl = document.getElementById("ticket-discussion");
+            var clone = tpl.content.cloneNode(true);
+            var tr = clone.querySelector("tr");
+            var posts = _.map(ticket.discussion_thread.posts, function(post) {
+                var clone = tr.cloneNode(true);
+                renderFields(clone, post);
+
+                renderAttachments(clone, post);
+
+                return clone;
+            });
+            var tbody = clone.querySelector("tbody");
+            tbody.removeChild(tr);
+            posts.forEach(function(post) {
+                tbody.appendChild(post);
+            });
+
+            parent.querySelector(".discussion").appendChild(clone);
+            parent.querySelector(".discussion-length").textContent = "(" + ticket.discussion_thread.posts.length + ")";
+            parent.querySelector(".toggle-discussion").addEventListener("click", function(e) {
+                e.target.classList.toggle("collapsed");
+                e.target.parentNode.querySelector(".discussion").classList.toggle("hidden", e.target.classList.contains("collapsed"));
+            });
+        } else {
+            parent.querySelector(".discussion").appendChild(clone);
+        }
+    }
+
+    function renderDetails(ticket) {
+        console.log("details for", ticket);
         var tpl = document.getElementById("ticket-tpl");
         var clone = tpl.content.cloneNode(true);
-        var tr = clone.children[0];
-        _.each(clone.querySelectorAll("tr > *[data-field]"), function(cell) {
-            var field = cell.dataset.field;
-            var value = ticket[field] || "";
-            cell.textContent = value;
-            tr.dataset[field] = value;
-        });
+
+        renderFields(clone, ticket);
+        renderDiscussion(clone, ticket);
+
         return clone;
     }
 
     function renderTickets(tickets) {
-        var tbody = document.getElementById("tickets-body");
-        tbody.innerHTML = "";
-        tickets.sort(getSortFunction(false)).forEach(function(ticket) {
-            tbody.appendChild(renderTicket(ticket));
-        });
+        table.rows().remove();
+        table.rows.add(tickets).draw();
     }
 
     function render(tickets) {
-        console.log("render", tickets);
         document.getElementById("match-count").textContent = tickets.length;
         document.getElementById("match-count-p").classList.remove("hidden");
-        if (tickets) {
-            renderTickets(tickets);
-        }
+        //if (tickets) {
+        renderTickets(tickets);
+        //}
     }
 
-    function computeCounters() {
-        return tickets.list().then(function(res) {
+
+    $("#tickets-body").on("click", "td.details-control", function() {
+        var tr = $(this).closest("tr");
+        var row = table.row(tr);
+
+        if (row.child.isShown()) {
+            // This row is already open - close it
+            row.child.hide();
+            tr.removeClass('shown');
+        } else {
+            // Open this row
+            row.child(renderDetails(row.data())).show();
+            tr.addClass('shown');
+        }
+    });
+
+
+    function computeCounters(coll) {
+        return coll.list().then(function(res) {
             var counters = {};
             res.data.forEach(function(ticket) {
                 if (!counters[ticket.tracker_id]) {
@@ -306,34 +398,34 @@ function main() {
                 }
                 counters[ticket.tracker_id][status] = (counters[ticket.tracker_id][status] || 0) + 1;
             });
-            return counters;
+            return {
+                coll: coll,
+                counters: counters
+            };
         });
     }
 
     function storeCounters(counters) {
         return stats.upsert({
-            id: "counters",
-            data: counters
+            id: "counters." + counters.coll.name,
+            data: counters.counters
         });
     }
 
     function getCounters() {
-        return stats.get("counters").then(function(res) {
+        return stats.get("counters.tickets").then(function(res) {
             console.log("cc", res);
             return res && res.data && res.data.data;
         });
     }
 
 
-    function index()  {
-        computeCounters().then(storeCounters).then(function() {
+    function index(coll)  {
+        computeCounters(coll).then(storeCounters).then(function() {
             console.log("Updated counters");
+            refreshCounters();
         });
     }
-
-    getMissed().then(function(missed) {
-        document.getElementById("missed-count").textContent = missed.length;
-    });
 
     function getCounterButtons() {
         return document.querySelectorAll("#open-counters .btn");
@@ -342,10 +434,10 @@ function main() {
     _.each(getCounterButtons(), function(btn) {
         btn.addEventListener("click", function(e) {
             var active = e.target.classList.toggle("active");
-            if(active){
-            	state.activeCounters[btn.dataset.tracker] = true;
-            }else{
-            	delete state.activeCounters[btn.dataset.tracker];
+            if (active) {
+                state.activeCounters[btn.dataset.tracker] = true;
+            } else {
+                delete state.activeCounters[btn.dataset.tracker];
             }
             saveState(state);
             search();
@@ -353,10 +445,7 @@ function main() {
     });
 
     function refreshCounters() {
-        getCounters().catch(function(e) {
-            console.debug("counters not found, indexing", e);
-            index();
-        }).then(function(counters) {
+        getCounters().then(function(counters) {
             console.log("counters", counters);
             _.each(getCounterButtons(), function(btn) {
                 var tracker = btn.dataset.tracker;
@@ -365,61 +454,132 @@ function main() {
         });
     }
 
-    refreshCounters();
-
-
-    _.map(getTicketDisplayFields(), function(th) {
-        th.addEventListener("click", function(event) {
-            var order = th.dataset.order;
-            if (order === "+") {
-                order = "-";
-            } else if (order === "-") {
-                order = "";
-            } else {
-                order = "+";
+    function noDBPane() {
+        fetchTicketsCount().then(function([count, oldCount]) {
+            document.getElementById("remote-tickets-count").textContent = count;
+            document.getElementById("old-tickets-count").textContent = oldCount;
+            document.getElementById("initial-fetch").removeAttribute("disabled");
+            showSpinner(false);
+        });
+        document.getElementById("initial-fetch").addEventListener("click", function() {
+            const toSync = [synchronize(tickets)];
+            if (document.getElementById("include-old").checked) {
+                console.log("also fetching old tickets");
+                toSync.push(synchronize(oldTickets));
             }
-            th.dataset.order = order;
-            sortTickets();
+            Promise.all(toSync).then(function() {
+                showWithDB(true);
+                hasDB();
+            });
         });
-    });
+    }
 
-    document.getElementById("clear-sorting").addEventListener("click", function() {
-        _.each(getTicketDisplayFields(), function(th) {
-            th.dataset.order = "";
-            state.sort = [];
-            saveState(state);
+    function showWithDB(show) {
+        _.each(document.querySelectorAll(".with-db"), function(comp) {
+            comp.classList.toggle("hidden", !show);
         });
-    });
+        _.each(document.querySelectorAll(".without-db"), function(comp) {
+            comp.classList.toggle("hidden", show);
+        });
+    }
 
-    if (history.state) {
-        state = history.state;
-        console.log("restoring state from history", state);
-        applyState(state);
-    } else if (window.location.hash.startsWith("#%7B")) {
-        try {
-            state = JSON.parse(decodeURIComponent(window.location.hash.substring(1)));
-        } catch (e) {
-            console.log("invalid state in hash", window.location.hash);
+    function hasDB() {
+        restoreInitialState();
+        refreshCounters();
+        getMissed().then(function(missed) {
+            document.getElementById("missed-count").textContent = missed.length;
+            showSpinner(false);
+        });
+        setInterval(function() {
+            fetchNewTickets().then(function(newCounts) {
+                var cnt = _.sum(newCounts);
+                if (cnt) {
+                    document.getElementById("new-msg").classList.remove("hidden");
+                    document.getElementById("new-count").textContent = cnt;
+                }
+            });
+        }, 60000);
+
+    }
+
+    function restoreInitialState() {
+        if (history.state) {
+            state = history.state;
+            console.log("restoring state from history", state);
+            applyState(state);
+        } else if (window.location.hash.startsWith("#%7B")) {
+            try {
+                state = JSON.parse(decodeURIComponent(window.location.hash.substring(1)));
+            } catch (e) {
+                console.log("invalid state in hash", window.location.hash);
+            }
+            console.log("restoring state from hash", state);
+            applyState(state);
+        } else {
+            state = defaultState();
+            console.log("using default state", state);
+            applyState(state);
         }
-        console.log("restoring state from hash", state);
-        applyState(state);
-    } else {
-    	state = defaultState();
-    	console.log("using default state", state);
-    	applyState(state);
     }
 
     window.addEventListener("popstate", function(e) {
         console.log("popstate", e, e.state);
-        if(e.state){
-			state = e.state;
-		}else{
-			state = defaultState();
-			console.log("default state", state);
-			applyState(state);
-		}
+        if (e.state) {
+            state = e.state;
+        } else {
+            state = defaultState();
+            console.log("default state", state);
+            applyState(state);
+        }
     });
 
+    function fetchTotalRecords(api, bucket, name, etag) {
+        var headers = {};
+        headers["Authorization"] = "Basic " + btoa("token:tr0ub4d@ur");
+        //etag && (headers["If-None-Match"] = "\""+etag+"\"");
+        return api.client.execute({
+            path: "/buckets/" + bucket + "/collections/" + name + "/records" + (etag ? ("?_since=" + etag) : ""),
+            method: "HEAD",
+            headers
+        }, {
+            raw: true
+        }).then(function(res) {
+            console.log("RES", res);
+            return res.headers.get("total-records");
+        });
+    }
+
+    function fetchTicketsCount() {
+        return Promise.all([fetchTotalRecords(tickets.api.bucket(tickets.bucket).collection(tickets.collection), tickets.bucket, tickets.name), fetchTotalRecords(tickets.api.bucket(tickets.bucket).collection(tickets.collection), tickets.bucket, "oldTickets")]);
+    }
+
+    function showSpinner(show) {
+        document.getElementById("loading").classList.toggle("hidden", !show);
+    }
+
+    function fetchNewTickets() {
+        function fetchTotalIfMod(coll) {
+            return coll.db.getLastModified().then(function(lastMod) {
+                if (lastMod) return fetchTotalRecords(coll.api.bucket(coll.bucket).collection(coll.name), coll.bucket, coll.name, lastMod);
+                else return Promise.resolve(0);
+            })
+        }
+        return Promise.all([
+            fetchTotalIfMod(tickets),
+            fetchTotalIfMod(oldTickets)
+        ]).then(function(multiRes) {
+            console.log("fetchNewTickets", multiRes);
+        });
+    }
+
+    tickets.list().then(function(res) {
+        showWithDB(res.data.length);
+        if (res.data.length) {
+            hasDB();
+        } else {
+            noDBPane();
+        }
+    });
 }
 
 window.addEventListener("DOMContentLoaded", main);

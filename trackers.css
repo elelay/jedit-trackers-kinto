@@ -8,10 +8,58 @@
 	background: #8fc4ff;
 }
 
-th[data-order = "+"] .glyphicon:before {
-	content:"\e155"
+td.details-control,
+.toggle-discussion {
+    cursor: pointer;
 }
 
-th[data-order = "-"] .glyphicon:before {
-	content:"\e156"
+td.details-control:after,
+.toggle-discussion:before {
+    font-family: 'Glyphicons Halflings';
+}
+
+td.details-control:after {
+	content: '\e081';
+}
+
+tr.shown td.details-control:after {
+	content: '\e082';
+}
+
+.attachments {
+	text-align: right;
+}
+
+.discussion tr td:first-child {
+	text-align: center;
+}
+
+.infos dt {
+	color: gray;
+	font-weight: normal;
+}
+
+.toggle-discussion:before {
+	margin-right: 0.5em;
+	content: '\e252 ';
+}
+.toggle-discussion.collapsed:before {
+	content: '\e250 ';
+}
+section {
+	margin-bottom: 1em;
+}
+
+#loading {
+	color: #AAA;
+}
+
+#new-msg {
+	font-size: large;
+}
+
+#new-msg .btn {
+	background-color: #ffc600;
+	border-color: #c89b00;
+	margin-left: 1em;
 }

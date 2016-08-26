@@ -86,7 +86,7 @@ function transform(objs) {
     objs/*.slice(0,1)*/.forEach(function(obj) {
         var tickets = transformOne(obj);
         var splitTickets = split(tickets, function(ticket){
-        	const open = ticket.status.indexOf("open") === 0;
+        	const open = (ticket.status.indexOf("open") === 0) || (ticket.status.indexOf("pending") === 0);
         	const thisYear = (ticket.created_date.indexOf("2016") === 0)
         		|| (ticket.mod_date.indexOf("2016") === 0);
         	return open || thisYear;

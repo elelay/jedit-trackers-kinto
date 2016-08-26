@@ -4,73 +4,126 @@
   <meta charset="utf-8">
   <title>jEdit Trackers</title>
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <link rel="stylesheet" href="bower_components/datatables.net-bs/css/dataTables.bootstrap.min.css">
+  <link rel="stylesheet" href="bower_components/font-awesome/css/font-awesome.min.css">
   <link rel="stylesheet" href="trackers.css">
 </head>
 <body>
   <div class="container">
     <h1><a href="#">jEdit Trackers</a>
-		<ul id="open-counters" class="list-inline counters">
-			<li><b>Open</b></li>
-			<li><button class="btn btn-default" data-tracker="bugs"><span class="count">0</span> bugs</button></li>
-			<li><button class="btn btn-default" data-tracker="plugin-bugs"><span class="count">0</span> plugin bugs</button></li>
-			<li><button class="btn btn-default" data-tracker="jeditlauncher-bugs"><span class="count">0</span> launcher bugs</button></li>
-			<li><button class="btn btn-default" data-tracker="patches"><span class="count">0</span> patches</button></li>
-			<li><button class="btn btn-default" data-tracker="plugin-patches"><span class="count">0</span> plugin patches</button></li>
-			<li><button class="btn btn-default" data-tracker="feature-requests"><span class="count">0</span> feature requests</button></li>
-			<li><button class="btn btn-default" data-tracker="plugin-feature-requests"><span class="count">0</span> plugin feature requests</button></li>
-		</ul>
-		<ul class="list-inline counters">
-			<li><b>Missed</b></li>
-			<li><button id="missed" class="btn btn-default"><span id="missed-count"> </span> missed</button></li>
-		</ul>
+  	<div  id="loading" class="pull-right">
+		<i class="fa fa-refresh fa-spin fa-fw"></i>
+		<span class="sr-only">Loading...</span>
+  	</div>
+  	<div  id="new-msg" class="pull-right hidden">
+		<i class="fa fa-exclamation"></i>
+		<span><span id="new-count"></span> updated tickets</span>
+		<button id="sync-new" class="btn btn-danger sync">Synchronize</button>
+  	</div>
+    	<div class="with-db hidden">
+			<ul id="open-counters" class="list-inline counters">
+				<li><b>Open</b></li>
+				<li><button class="btn btn-default" data-tracker="bugs"><span class="count">0</span> bugs</button></li>
+				<li><button class="btn btn-default" data-tracker="plugin-bugs"><span class="count">0</span> plugin bugs</button></li>
+				<li><button class="btn btn-default" data-tracker="jeditlauncher-bugs"><span class="count">0</span> launcher bugs</button></li>
+				<li><button class="btn btn-default" data-tracker="patches"><span class="count">0</span> patches</button></li>
+				<li><button class="btn btn-default" data-tracker="plugin-patches"><span class="count">0</span> plugin patches</button></li>
+				<li><button class="btn btn-default" data-tracker="feature-requests"><span class="count">0</span> feature requests</button></li>
+				<li><button class="btn btn-default" data-tracker="plugin-feature-requests"><span class="count">0</span> plugin feature requests</button></li>
+			</ul>
+			<ul class="list-inline counters">
+				<li><b>Missed</b></li>
+				<li><button id="missed" class="btn btn-default"><span id="missed-count"> </span> missed</button></li>
+			</ul>
+		</div>
     </h1>
-    <div class="row">
-    	
-    </div>
-    <form class="form-inline" id="form">
+    <form class="form-inline with-db hidden" id="form">
       <div class="form-group">
         <input id="search" class="form-control" type="text" name="search" placeholder="Type search terms">
         <input class="btn btn-primary" type="submit" value="Search">
       </div>
     </form>
     <hr>
-    <p id="match-count-p" class="hidden"><span id="match-count">0</span> matches.</p>
-    <table id="tickets" class="table">
-		<thead>
-			<tr>
-				<th data-field="ticket_num" data-order="+" data-order-as="num"># <span class="glyphicon"></span></th>
-				<th data-field="tracker_label">Tracker <span class="glyphicon"></span></th>
-				<th data-field="summary">Summary <span class="glyphicon"></span></th>
-				<th data-field="status">Status <span class="glyphicon"></span></th>
-				<th data-field="created_date">Submitted <span class="glyphicon"></span></th>
-				<th data-field="reported_by">By <span class="glyphicon"></span></th>
-				<th data-field="assigned_to">Assigned <span class="glyphicon"></span></th>
-				<td id="clear-sorting">clear <span class="glyphicon glyphicon-sort"></span></th>
-			</tr>
-		</thead>
-		<tbody id="tickets-body">
-		</tbody>
-	</table>
+    <div class="with-db hidden">
+		<p id="match-count-p" class="hidden"><span id="match-count">0</span> matches.</p>
+		<table id="tickets" class="table table-striped table-bordered">
+			<thead>
+				<tr>
+					<th></th>
+					<th data-field="ticket_num" data-order="+" data-order-as="num"># <span class="glyphicon"></span></th>
+					<th data-field="tracker_label">Tracker <span class="glyphicon"></span></th>
+					<th data-field="summary">Summary <span class="glyphicon"></span></th>
+					<th data-field="status">Status <span class="glyphicon"></span></th>
+					<th data-field="created_date">Submitted <span class="glyphicon"></span></th>
+					<th data-field="reported_by">By <span class="glyphicon"></span></th>
+					<th data-field="assigned_to">Assigned <span class="glyphicon"></span></th>
+				</tr>
+			</thead>
+			<tbody id="tickets-body">
+			</tbody>
+		</table>
+	</div>
+	<div class="without-db hidden">
+		<p><b>Hi there!</b>
+		Seems like the local database is empty. Would you like to get <em><span id="remote-tickets-count">some</span></em>
+		tickets from the server? </p>
+		<p>You can also include old (closed before Jan. 2016) tickets, but it makes a bigger fetch and you'll need at least 700MB free
+		in your user directory otherwise your browser will refuse to create the DB.</p>
+		<div class="form form-inline">
+			<div class="checkbox">
+				<label>
+					<input id="include-old" name="include-old" type="checkbox"> Include <em><span id="old-tickets-count">some</span></em> old tickets
+				</label>
+			</div>
+		</div>
+		<div class="form text-right">
+		<button id="initial-fetch" class="btn btn-primary" disabled>Fetch tickets</button>
+		</div>
+	</div>
     <template id="ticket-tpl">
-    <tr>
-	<th data-field="ticket_num">#</th>
-	<td data-field="tracker_label">Tracker</td>
-	<td data-field="summary">Summary</td>
-	<td data-field="status">Status</td>
-	<td data-field="created_date">Submitted</td>
-	<td data-field="reported_by">By</td>
-	<td data-field="assigned_to">Assigned</td>
-    </tr>
-    </template>
-    <template id="full-ticket-tpl">
-    <div class="full row">
-    	<pre data-field="description"></pre>
+    <div class="details">
+    	<dl class="dl-horizontal infos">
+    		<dt>Labels</dt>
+    		<dd data-field="labels" aria-label="labels"></dd>
+    		</li>
+    		<dt>Group</dt>
+    		<dd data-field="custom_fields._milestone" aria-label="group"></dd>
+    		<dt>Priority</dt>
+    		<dd data-field="custom_fields._priority" aria-label="priority"></dd>
+    		<dt>Resolution</dt>
+    		<dd data-field="__resolution" aria-label="priority"></dd>
+    	</dl>
+    	<section>
+			<label>Description</label>
+			<p data-field="description" data-ml="true" aria-label="Description"></p>
+		</section>
+		<section>
+			<label class="toggle-discussion collapsed">Comments <span class="discussion-length"></span></label>
+			<div class="discussion hidden"></div>
+		</section>
     </div>
+    </template>
+    <template id="ticket-discussion">
+    	<table class="table table-condensed">
+    		<tbody>
+				<tr>
+					<td>
+						<span data-field="timestamp"></span><br>
+						<span data-field="author"></span>
+					</td>
+					<td>
+						<p data-field="text" data-ml="true"></p>
+						<div class="attachments">
+						</div>
+					</td>
+				</tr>
+    		</tbody>
+    	</table>
     </template>
     <hr>
 	<div class="row">
 	  <div class="col-md-6">
-		<button id="sync" class="btn">Synchronize</button>
+		<button id="sync" class="btn btn-default with-db hidden sync">Synchronize</button>
 	  </div>
 	  <div class="col-md-6">
 		<textarea id="results" class="form-control col-md-6" rows="10"></textarea>
@@ -79,6 +132,9 @@
   </div>
   <script src="bower_components/moment/moment.js"></script>
   <script src="bower_components/lodash/lodash.js"></script>
+  <script src="bower_components/jquery/dist/jquery.min.js"></script>
+  <script src="bower_components/datatables.net/js/jquery.dataTables.js"></script>
+  <script src="bower_components/datatables.net-bs/js/dataTables.bootstrap.js"></script>
   <script src="kinto.js"></script>
   <script src="trackers.js"></script>
 </body>
