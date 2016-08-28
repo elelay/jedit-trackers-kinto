@@ -29,9 +29,11 @@ function main() {
 
     function defaultState() {
         return {
-            //        	sort: [[1,"asc"]],
+            //            sort: [[1,"asc"]],
             filter: "",
-            activeCounters: {}
+            activeCounters: {},
+            missed: false,
+            all: false
         };
     }
 
@@ -53,9 +55,16 @@ function main() {
         document.getElementById("search").value = state.filter;
     }
 
+    function applyAllMissed(state) {
+        ["all", "missed"].forEach(function(id) {
+            document.getElementById(id).classList.toggle("active", Boolean(state[id]));
+        });
+    }
+
     function applyState(state) {
         //applySort(state);
         applyCounters(state);
+        applyAllMissed(state);
         applyFilter(state);
         search();
     }
@@ -98,13 +107,10 @@ function main() {
             search();
         });
 
-    document.getElementById("missed")
-        .addEventListener("click", function(event) {
-            getMissed()
-                .then(render)
-                .catch(function(err) {
-                    console.error(err);
-                });
+
+    document.getElementById("clear")
+        .addEventListener("click", function() {
+                document.getElementById("search").value = "";
         });
 
     var syncOptions = {
@@ -132,14 +138,22 @@ function main() {
         };
     };
 
+
     function search() {
         var filter = state.filter;
-        var activeTrackers = _.map(document.querySelectorAll(".counters .btn.active"), function(btn) {
-            return btn.dataset.tracker;
-        });
-        console.log("searching for", filter, "in", activeTrackers);
+        var activeTrackers = Object.keys(state.activeCounters);
+        var all = state.all;
+        var missed = state.missed;
+        console.log("searching for", filter, "in", (missed && "MISSED") ||  (all && "ALL") || activeTrackers);
         var results;
-        if (!filter && !activeTrackers.length) {
+        var includeOld = all && !activeTrackers.length && !missed;
+
+        function emptyRes() {
+            return Promise.resolve({
+                data: []
+            });
+        }
+        if (!filter && !activeTrackers.length && !all && !missed) {
             results = Promise.resolve([]);
         } else if (filter.match(/^#\d+/)) {
             var byNum = {
@@ -148,21 +162,22 @@ function main() {
                 }
             };
 
-            results = Promise.all([tickets.list(byNum), activeTrackers.length ? Promise.resolve({
-                data: []
-            }) : oldTickets.list(byNum)]).then(function(multiRes) {
-                return _.flatMap(multiRes, function(res) {
-                    return res.data.filter(filterByTrackers(activeTrackers));
+            results = Promise.all([tickets.list(byNum),
+                    includeOld ? oldTickets.list(byNum) : emptyRes()
+                ])
+                .then(function(multiRes) {
+                    return _.flatMap(multiRes, function(res) {
+                        return res.data.filter(missed ? filterByMissed : filterByTrackers(activeTrackers));
+                    });
                 });
-            });
         } else {
-            results = Promise.all([tickets.list(), activeTrackers.length ? Promise.resolve({
-                    data: []
-                }) : oldTickets.list()])
+            results = Promise.all([tickets.list(),
+                    includeOld ? oldTickets.list() : emptyRes()
+                ])
                 .then(function(multiRes) {
                     return _.flatMap(multiRes, function(res) {
                         // Filter tickets according to their summary
-                        var match = res.data.filter(filterByTrackers(activeTrackers)).filter(filterBySummary(filter));
+                        var match = res.data.filter(missed ? filterByMissed : filterByTrackers(activeTrackers)).filter(filterBySummary(filter));
                         console.log("match", filter, match.length);
                         return match;
                     });
@@ -175,6 +190,14 @@ function main() {
     }
 
 
+    const oldishDate = moment(new Date()).add(-2, "weeks");
+
+    function filterByMissed(ticket) {
+        const no_answer = ticket.discussion_thread.posts.length === 0;
+        const oldish = moment(ticket.created_date).isSameOrBefore(oldishDate);
+        return no_answer && oldish;
+    }
+
     function getMissed() {
         return tickets.list({
                 filters: {
@@ -184,12 +207,7 @@ function main() {
             .then(function(res) {
                 console.log(res.data[0]);
                 // Filter tickets according to their summary
-                var oldishDate = moment(new Date()).add(-2, "weeks");
-                var match = res.data.filter(function(ticket) {
-                    const no_answer = ticket.discussion_thread.posts.length === 0;
-                    const oldish = moment(ticket.created_date).isSameOrBefore(oldishDate);
-                    return no_answer && oldish;
-                });
+                var match = res.data.filter(filterByMissed);
                 console.log("match missed", match.length);
                 return match;
             })
@@ -230,7 +248,8 @@ function main() {
         .addEventListener("click", syncClick);
 
     function syncClick() {
-    	console.log("syncClick");
+        console.log("syncClick");
+
         function enableSync(enabled) {
             _.each(document.querySelectorAll(".sync"), function(btn) {
                 if (enabled) {
@@ -344,6 +363,11 @@ function main() {
         }
     }
 
+    function renderUrl(clone, ticket) {
+        var url = "https://sourceforge.net/p/jedit/" + ticket.tracker_id + "/" + ticket.ticket_num + "/";
+        clone.querySelector(".ticket-url").setAttribute("href", url);
+    }
+
     function renderDetails(ticket) {
         console.log("details for", ticket);
         var tpl = document.getElementById("ticket-tpl");
@@ -351,6 +375,7 @@ function main() {
 
         renderFields(clone, ticket);
         renderDiscussion(clone, ticket);
+        renderUrl(clone, ticket);
 
         return clone;
     }
@@ -388,6 +413,7 @@ function main() {
     function computeCounters(coll) {
         return coll.list().then(function(res) {
             var counters = {};
+            var total = 0;
             res.data.forEach(function(ticket) {
                 if (!counters[ticket.tracker_id]) {
                     counters[ticket.tracker_id] = {};
@@ -397,18 +423,23 @@ function main() {
                     status = status.substring(0, status.indexOf("-"));
                 }
                 counters[ticket.tracker_id][status] = (counters[ticket.tracker_id][status] || 0) + 1;
+                total++;
             });
+            counters._total = total;
             return {
                 coll: coll,
-                counters: counters
+                counters: counters,
+                tickets: res.data
             };
         });
     }
 
-    function storeCounters(counters) {
+    function storeCounters(res) {
         return stats.upsert({
-            id: "counters." + counters.coll.name,
-            data: counters.counters
+            id: "counters." + res.coll.name,
+            data: res.counters
+        }).then(function(){
+            return res;
         });
     }
 
@@ -419,11 +450,27 @@ function main() {
         });
     }
 
+    function getAllCount() {
+        return Promise.all(["counters.tickets", "counters.oldTickets"].map(stats.get.bind(stats)))
+            .then(function(multiRes) {
+                return _.sum(multiRes.map(function(res) {
+                    return res.data.data._total;
+                }));
+            });
+    }
+
+    function refreshTotal() {
+        getAllCount().then(function(total) {
+            document.getElementById("all-count").textContent = total;
+        });
+    }
 
     function index(coll)  {
-        computeCounters(coll).then(storeCounters).then(function() {
+        computeCounters(coll).then(storeCounters).then(function(res) {
             console.log("Updated counters");
             refreshCounters();
+            refreshTotal();
+            return res;
         });
     }
 
@@ -436,13 +483,36 @@ function main() {
             var active = e.target.classList.toggle("active");
             if (active) {
                 state.activeCounters[btn.dataset.tracker] = true;
+                delete state.missed;
+                delete state.all;
             } else {
                 delete state.activeCounters[btn.dataset.tracker];
             }
             saveState(state);
-            search();
+            applyState(state);
         });
     });
+
+    ["all", "missed"].forEach(function(id) {
+        document.getElementById(id).addEventListener("click", function(e) {
+            var active = e.target.classList.toggle("active");
+            if(active){
+                state[id] = true;
+                state.activeCounters = {};
+                if(id === "missed"){
+                    delete state.all;
+                }else{
+                    delete state.missed;
+                }
+            }else{
+                delete state[id];
+            }
+            saveState(state);
+            applyState(state);
+            //search();
+        });
+    });
+
 
     function refreshCounters() {
         getCounters().then(function(counters) {
@@ -486,6 +556,7 @@ function main() {
     function hasDB() {
         restoreInitialState();
         refreshCounters();
+        refreshTotal();
         getMissed().then(function(missed) {
             document.getElementById("missed-count").textContent = missed.length;
             showSpinner(false);
@@ -536,7 +607,6 @@ function main() {
     function fetchTotalRecords(api, bucket, name, etag) {
         var headers = {};
         headers["Authorization"] = "Basic " + btoa("token:tr0ub4d@ur");
-        //etag && (headers["If-None-Match"] = "\""+etag+"\"");
         return api.client.execute({
             path: "/buckets/" + bucket + "/collections/" + name + "/records" + (etag ? ("?_since=" + etag) : ""),
             method: "HEAD",
@@ -545,7 +615,7 @@ function main() {
             raw: true
         }).then(function(res) {
             console.log("RES", res);
-            return res.headers.get("total-records");
+            return parseInt(res.headers.get("total-records"));
         });
     }
 
@@ -569,6 +639,7 @@ function main() {
             fetchTotalIfMod(oldTickets)
         ]).then(function(multiRes) {
             console.log("fetchNewTickets", multiRes);
+            return multiRes;
         });
     }
 
@@ -580,6 +651,7 @@ function main() {
             noDBPane();
         }
     });
+
 }
 
 window.addEventListener("DOMContentLoaded", main);

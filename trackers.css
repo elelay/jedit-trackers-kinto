@@ -26,6 +26,10 @@ tr.shown td.details-control:after {
 	content: '\e082';
 }
 
+.details {
+	position: relative;
+}
+
 .attachments {
 	text-align: right;
 }
@@ -37,6 +41,13 @@ tr.shown td.details-control:after {
 .infos dt {
 	color: gray;
 	font-weight: normal;
+}
+
+.ticket-url {
+	display: block;
+	position: absolute;
+	top: 1em;
+	right: 1em;
 }
 
 .toggle-discussion:before {
@@ -62,4 +73,8 @@ section {
 	background-color: #ffc600;
 	border-color: #c89b00;
 	margin-left: 1em;
+}
+
+#clear {
+	color: #666;
 }
