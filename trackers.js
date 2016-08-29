@@ -8,6 +8,7 @@ String.prototype.contains = String.prototype.contains || function(x) {
 const thenLog = console.log.bind(console);
 var db, stats, tickets, oldTickets;
 var table;
+var lunrIndex = {};
 const nopSchema = {
     generate: function() {
         throw new Error("can't generate keys");
@@ -19,8 +20,12 @@ const nopSchema = {
 
 function main() {
     db = new Kinto();
-    tickets = db.collection("tickets");
-    oldTickets = db.collection("oldTickets");
+    tickets = db.collection("tickets", {
+        idSchema: nopSchema
+    });
+    oldTickets = db.collection("oldTickets", {
+        idSchema: nopSchema
+    });
     stats = db.collection("stats", {
         idSchema: nopSchema
     });
@@ -85,7 +90,6 @@ function main() {
         "data": null,
         "defaultContent": ""
     });
-    console.log("fields", fields);
 
     table = new $("#tickets").DataTable({
         data: [],
@@ -110,7 +114,7 @@ function main() {
 
     document.getElementById("clear")
         .addEventListener("click", function() {
-                document.getElementById("search").value = "";
+            document.getElementById("search").value = "";
         });
 
     var syncOptions = {
@@ -138,6 +142,35 @@ function main() {
         };
     };
 
+    function searchBySummaryIndex(filter, includeOld) {
+        var toSearch = [{
+            coll: tickets,
+            index: lunrIndex.tickets
+        }];
+        if (includeOld) {
+            toSearch.push({
+                coll: oldTickets,
+                index: lunrIndex.oldTickets
+            });
+        }
+        return Promise.all(toSearch.map(function(s) {
+            if (!s.index) {
+                return Promise.resolve({
+                    data: []
+                });
+            } else {
+                return Promise.all(s.index.search(filter).map(function(hit) {
+                    return s.coll.get(hit.ref);
+                })).then(function(allRes) {
+                    return {
+                        data: allRes.map(function(res) {
+                            return res.data;
+                        })
+                    };
+                });
+            }
+        }));
+    }
 
     function search() {
         var filter = state.filter;
@@ -171,13 +204,20 @@ function main() {
                     });
                 });
         } else {
-            results = Promise.all([tickets.list(),
+            if (filter) {
+                results = searchBySummaryIndex(filter, includeOld).then(function(multiRes) {
+                    console.log("searchBySummaryIndex", multiRes);
+                    return multiRes;
+                });
+            } else {
+                results = Promise.all([tickets.list(),
                     includeOld ? oldTickets.list() : emptyRes()
                 ])
+            }
+            results = results
                 .then(function(multiRes) {
                     return _.flatMap(multiRes, function(res) {
-                        // Filter tickets according to their summary
-                        var match = res.data.filter(missed ? filterByMissed : filterByTrackers(activeTrackers)).filter(filterBySummary(filter));
+                        var match = res.data.filter(missed ? filterByMissed : filterByTrackers(activeTrackers));
                         console.log("match", filter, match.length);
                         return match;
                     });
@@ -195,6 +235,7 @@ function main() {
     function filterByMissed(ticket) {
         const no_answer = ticket.discussion_thread.posts.length === 0;
         const oldish = moment(ticket.created_date).isSameOrBefore(oldishDate);
+        const open = ticket.status === "open";
         return no_answer && oldish;
     }
 
@@ -226,6 +267,8 @@ function main() {
         return coll.sync(syncOptions)
             .then(function(res) {
                 // remove details
+                var created = res.created;
+                var updated = res.updated;
                 res.created = res.created.length;
                 res.updated = res.updated.length;
 
@@ -233,7 +276,7 @@ function main() {
                 if (res.conflicts.length) {
                     return handleConflicts(coll, res.conflicts);
                 } else {
-                    return index(coll);
+                    return index(coll, created, updated, res.deleted);
                 }
                 return res;
             })
@@ -260,9 +303,9 @@ function main() {
             });
         }
         enableSync(false);
-        stats.get("counters.oldTickets").then(function(res) {
+        stats.getAny("counters.oldTickets").then(function(res) {
             var sync = [synchronize(tickets)];
-            if (res.data.length) {
+            if (res.data) {
                 sync.push(synchronize(oldTickets));
             }
             return Promise.all(sync).then(function() {
@@ -359,7 +402,9 @@ function main() {
                 e.target.parentNode.querySelector(".discussion").classList.toggle("hidden", e.target.classList.contains("collapsed"));
             });
         } else {
-            parent.querySelector(".discussion").appendChild(clone);
+            var toggle = parent.querySelector(".toggle-discussion");
+            toggle.innerHTML = "No Comment";
+            toggle.classList.add("no");
         }
     }
 
@@ -409,36 +454,91 @@ function main() {
         }
     });
 
-
-    function computeCounters(coll) {
-        return coll.list().then(function(res) {
-            var counters = {};
-            var total = 0;
-            res.data.forEach(function(ticket) {
-                if (!counters[ticket.tracker_id]) {
-                    counters[ticket.tracker_id] = {};
+    function merge(obj, upd, subtract) {
+        Object.keys(upd).forEach(function(k) {
+            if (!(k in obj)) {
+                if (_.isObject(upd[k]) && subtract) {
+                    throw new Error("trying to remove missing key " + k + " from " + obj);
+                } else {
+                    obj[k] = _.isObject(upd[k]) ? {} : 0;
                 }
-                var status = ticket.status;
-                if (status.indexOf("-") > 0) {
-                    status = status.substring(0, status.indexOf("-"));
-                }
-                counters[ticket.tracker_id][status] = (counters[ticket.tracker_id][status] || 0) + 1;
-                total++;
-            });
-            counters._total = total;
-            return {
-                coll: coll,
-                counters: counters,
-                tickets: res.data
-            };
+            }
         });
+        Object.keys(obj).forEach(function(k) {
+            if (upd[k]) {
+                if (_.isNumber(obj[k])) {
+                    if (subtract) {
+                        obj[k] -= upd[k];
+                    } else {
+                        obj[k] += upd[k];
+                    }
+                } else if (_.isObject(obj[k])) {
+                    merge(obj[k], upd[k]);
+                } else {
+                    throw new Error("merge non Object/Number: " + obj[k] + ": " + typeof obj[k]);
+                }
+            }
+        });
+    }
+
+    function computeCountersDelta(res) {
+        if (res.deleted.length) {
+            // I can't adjust counters when a ticket is deleted: I need the old value
+            return res.coll.list().then(function(listRes) {
+                res.tickets = res.data;
+                return computeCounters(res);
+            });
+        } else {
+
+            var newCnts = computeCounters({
+                tickets: res.created
+            });
+            var oldCnts = computeCounters({
+                tickets: res.updated.map(function(o) {
+                    return o.old;
+                })
+            });
+            var updCnts = computeCounters({
+                tickets: res.updated.map(function(o) {
+                    return o.new;
+                })
+            });
+
+            merge(res.counters, newCnts.counters);
+            merge(res.counters, oldCnts.counters, true);
+            merge(res.counters, updCnts.counters);
+
+            return res;
+        }
+    }
+
+    function computeCounters(res) {
+        var counters = {};
+        var total = 0;
+        var missed = 0;
+        res.tickets.forEach(function(ticket) {
+            if (!counters[ticket.tracker_id]) {
+                counters[ticket.tracker_id] = {};
+            }
+            var status = ticket.status;
+            if (status.indexOf("-") > 0) {
+                status = status.substring(0, status.indexOf("-"));
+            }
+            counters[ticket.tracker_id][status] = (counters[ticket.tracker_id][status] || 0) + 1;
+            total++;
+            if (filterByMissed(ticket)) missed++;
+        });
+        counters._total = total;
+        counters._missed = missed;
+        res.counters = counters;
+        return res;
     }
 
     function storeCounters(res) {
         return stats.upsert({
             id: "counters." + res.coll.name,
             data: res.counters
-        }).then(function(){
+        }).then(function() {
             return res;
         });
     }
@@ -451,25 +551,73 @@ function main() {
     }
 
     function getAllCount() {
-        return Promise.all(["counters.tickets", "counters.oldTickets"].map(stats.get.bind(stats)))
+        return Promise.all(["counters.tickets", "counters.oldTickets"].map(stats.getAny.bind(stats)))
             .then(function(multiRes) {
-                return _.sum(multiRes.map(function(res) {
-                    return res.data.data._total;
-                }));
+                return multiRes.reduce(function(acc, res) {
+                    acc.total += (res.data && res.data.data._total) || 0;
+                    acc.missed += (res.data && res.data.data._missed) || 0;
+                    return acc;
+                }, {
+                    total: 0,
+                    missed: 0
+                });
             });
     }
 
-    function refreshTotal() {
-        getAllCount().then(function(total) {
-            document.getElementById("all-count").textContent = total;
+    function refreshTotalMissed() {
+        return getAllCount().then(function(total) {
+            document.getElementById("all-count").textContent = total.total;
+            document.getElementById("missed-count").textContent = total.missed;
         });
     }
 
-    function index(coll)  {
-        computeCounters(coll).then(storeCounters).then(function(res) {
-            console.log("Updated counters");
+    //index(tickets);
+    //index(oldTickets);
+
+    function index(coll, created, updated, deleted)  {
+        console.log("index", created && created.length, updated && updated.length, deleted && deleted.length);
+        var list;
+
+        function initList() {
+            return coll.list().then(function(res) {
+                return {
+                    coll: coll,
+                    tickets: res.data,
+                    compCnt: computeCounters,
+                    indx: indexLunr
+                };
+            });
+        }
+
+        if (created) {
+            list = stats.get("counters." + coll.name)
+                .then(function(cnt) {
+                    return {
+                        coll: coll,
+                        counters: cnt.data.data,
+                        created: created,
+                        updated: updated,
+                        deleted: deleted,
+                        compCnt: computeCountersDelta,
+                        indx: indexLunrDelta
+                    };
+                })
+                .catch(initList)
+        } else {
+            list = initList();
+        }
+
+        return list.then(function(res) {
+            return res.compCnt(res);
+        }).then(storeCounters).then(function(res) {
+            console.log("Updated counters for", res.coll.name);
             refreshCounters();
-            refreshTotal();
+            refreshTotalMissed();
+            return res;
+        }).then(function(res) {
+            return res.indx(res);
+        }).then(storeLunrIndex).then(function(res) {
+            console.log("Updated lunr index for", res.coll.name);
             return res;
         });
     }
@@ -496,15 +644,15 @@ function main() {
     ["all", "missed"].forEach(function(id) {
         document.getElementById(id).addEventListener("click", function(e) {
             var active = e.target.classList.toggle("active");
-            if(active){
+            if (active) {
                 state[id] = true;
                 state.activeCounters = {};
-                if(id === "missed"){
+                if (id === "missed") {
                     delete state.all;
-                }else{
+                } else {
                     delete state.missed;
                 }
-            }else{
+            } else {
                 delete state[id];
             }
             saveState(state);
@@ -554,22 +702,26 @@ function main() {
     }
 
     function hasDB() {
-        restoreInitialState();
-        refreshCounters();
-        refreshTotal();
-        getMissed().then(function(missed) {
-            document.getElementById("missed-count").textContent = missed.length;
-            showSpinner(false);
-        });
-        setInterval(function() {
-            fetchNewTickets().then(function(newCounts) {
-                var cnt = _.sum(newCounts);
-                if (cnt) {
-                    document.getElementById("new-msg").classList.remove("hidden");
-                    document.getElementById("new-count").textContent = cnt;
-                }
+        loadLunrIndex().then(function() {
+            restoreInitialState();
+            refreshCounters();
+            refreshTotalMissed().then(function() {
+                showSpinner(false);
             });
-        }, 60000);
+            //getMissed().then(function(missed) {
+            //    document.getElementById("missed-count").textContent = missed.length;
+            //    showSpinner(false);
+            //});
+            setInterval(function() {
+                fetchNewTickets().then(function(newCounts) {
+                    var cnt = _.sum(newCounts);
+                    if (cnt) {
+                        document.getElementById("new-msg").classList.remove("hidden");
+                        document.getElementById("new-count").textContent = cnt;
+                    }
+                });
+            }, 60000);
+        });
 
     }
 
@@ -643,11 +795,80 @@ function main() {
         });
     }
 
-    tickets.list().then(function(res) {
-        showWithDB(res.data.length);
-        if (res.data.length) {
+    function createLunr() {
+        return lunr(function() {
+            this.field('summary', {
+                boost: 10
+            })
+            this.field('description')
+            this.ref('id')
+        });
+    }
+
+    function indexLunrDelta(res) {
+        res.index = lunrIndex[res.coll.name];
+        if (res.index) {
+            res.created.forEach(function(ticket) {
+                res.index.add(ticket);
+            });
+            res.updated.forEach(function(upd) {
+                res.index.update(upd.new);
+            });
+            res.deleted.forEach(function(ticket) {
+                res.index.remove(ticket);
+            });
+            return res;
+        } else {
+            if (res.tickets) {
+                return indexLunr(res);
+            } else {
+                return res.coll.list().then(function(listRes) {
+                    res.tickets = listRes.data;
+                    return indexLunr(res);
+                });
+            }
+        }
+    }
+
+    function indexLunr(res) {
+        var index = createLunr();
+        res.tickets.forEach(function(ticket) {
+            index.add(ticket);
+        });
+        res.index = index;
+        lunrIndex[res.coll.name] = index;
+        return res;
+    }
+
+    function storeLunrIndex(res) {
+        return stats.upsert({
+            id: "index." + res.coll.name,
+            data: JSON.stringify(res.index.toJSON())
+        }).then(function() {
+            return res;
+        });
+    }
+
+    function loadLunrIndex() {
+        return Promise.all(["index.tickets", "index.oldTickets"].map(stats.getAny.bind(stats)))
+            .then(function(multiRes) {
+                multiRes.forEach(function(res) {
+                    if (res.data) {
+                        var i = createLunr();
+                        i = lunr.Index.load(JSON.parse(res.data.data));
+                        lunrIndex[res.data.id.substring("index.".length)] = i;
+                    }
+                });
+                console.log("loaded", Object.keys(lunrIndex), "LunrIndexes");
+            });
+    }
+
+    tickets.db.getLastModified().then(function(res) {
+        showWithDB(res);
+        if (res) {
             hasDB();
         } else {
+            stats.clear();
             noDBPane();
         }
     });

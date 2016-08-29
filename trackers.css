@@ -1,3 +1,6 @@
+#go {
+	margin-right: 1em;
+}
 .counters {
 	font-size: 12px;
 	display:inline-block;
@@ -57,6 +60,14 @@ tr.shown td.details-control:after {
 .toggle-discussion.collapsed:before {
 	content: '\e250 ';
 }
+
+.toggle-discussion.no {
+	cursor: default;
+}
+.toggle-discussion.no:before {
+	content:''
+}
+
 section {
 	margin-bottom: 1em;
 }
@@ -77,4 +88,9 @@ section {
 
 #clear {
 	color: #666;
+}
+
+span[data-field = 'timestamp'],
+span[data-field = 'author']{
+	color: #AAA;
 }

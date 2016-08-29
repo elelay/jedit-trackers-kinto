@@ -21,6 +21,7 @@
     "moment": "^2.14.1",
     "datatables.net": "^1.10.12",
     "datatables.net-bs": "^1.10.12",
-    "font-awesome": "fontawesome#^4.6.3"
+    "font-awesome": "fontawesome#^4.6.3",
+    "lunr.js": "lunr#^0.7.1"
   }
 }
