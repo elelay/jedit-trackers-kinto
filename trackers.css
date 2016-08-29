@@ -46,11 +46,13 @@ tr.shown td.details-control:after {
 	font-weight: normal;
 }
 
-.ticket-url {
-	display: block;
+.ticket-buttons {
 	position: absolute;
 	top: 1em;
 	right: 1em;
+}
+.ticket-buttons li:not(first-child){
+	margin-top:0.5em;
 }
 
 .toggle-discussion:before {
@@ -93,4 +95,28 @@ section {
 span[data-field = 'timestamp'],
 span[data-field = 'author']{
 	color: #AAA;
+}
+
+.breadcrumbs {
+	display: inline;
+}
+
+h1 {
+	font-size: 150%;
+}
+
+#ticket {
+	position: relative;
+}
+
+#ticket .details {
+	position: initial;
+}
+
+#ticket dl.infos:first-child{
+	margin-bottom:0;
+}
+
+#ticket .goto-ticket {
+	display:none;
 }

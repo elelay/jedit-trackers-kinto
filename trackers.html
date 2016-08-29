@@ -11,6 +11,12 @@
 <body>
   <div class="container">
     <h1><a href="#">jEdit Trackers</a>
+      <div class="breadcrumbs with-ticket hidden">
+        <span class="glyphicon glyphicon-chevron-right text-muted"></span>
+        <span id="tracker-label"></span>
+        <span class="glyphicon glyphicon-chevron-right text-muted"></span>
+        <a id="ticket-num" href="#"></a>
+      </div>
       <div  id="loading" class="pull-right">
         <i class="fa fa-refresh fa-spin fa-fw"></i>
         <span class="sr-only">Loading...</span>
@@ -94,20 +100,36 @@
         <button id="initial-fetch" class="btn btn-primary" disabled>Fetch tickets</button>
         </div>
     </div>
+    <div id="ticket-not-found" class="alert alert-danger hidden"></div>
+    <div id="ticket" class="with-ticket hidden">
+		<dl class="dl-horizontal infos">
+            <dt>Status</dt>
+            <dd data-field="status"></dd>
+            <dt>Submitted</dt>
+            <dd data-field="created_date"></dd>
+            <dt>By</dt>
+            <dd data-field="reported_by"></dd>
+            <dt>Assigned To</dt>
+            <dd data-field="assigned_to"></dd>
+        </dl>
+        <div id="ticket-contents"></div>
+    </div>
     <template id="ticket-tpl">
     <div class="details">
-        <a class="ticket-url btn btn-info btn-small">Go to SF</a>
+        <ul class="ticket-buttons list-unstyled">
+            <li><a class="goto-ticket btn btn-primary btn-small">Open</a></li>
+            <li><a class="ticket-url btn btn-info btn-small">Go to SF</a></li>
+        </ul>
 
         <dl class="dl-horizontal infos">
             <dt>Labels</dt>
-            <dd data-field="labels" aria-label="labels"></dd>
-            </li>
+            <dd data-field="labels"></dd>
             <dt>Group</dt>
-            <dd data-field="custom_fields._milestone" aria-label="group"></dd>
+            <dd data-field="custom_fields._milestone"></dd>
             <dt>Priority</dt>
-            <dd data-field="custom_fields._priority" aria-label="priority"></dd>
+            <dd data-field="custom_fields._priority"></dd>
             <dt>Resolution</dt>
-            <dd data-field="__resolution" aria-label="resolution"></dd>
+            <dd data-field="__resolution"></dd>
         </dl>
         <section>
             <label>Description</label>

@@ -411,6 +411,7 @@ function main() {
     function renderUrl(clone, ticket) {
         var url = "https://sourceforge.net/p/jedit/" + ticket.tracker_id + "/" + ticket.ticket_num + "/";
         clone.querySelector(".ticket-url").setAttribute("href", url);
+        clone.querySelector(".goto-ticket").setAttribute("href", "#" + ticket.id);
     }
 
     function renderDetails(ticket) {
@@ -696,33 +697,53 @@ function main() {
         _.each(document.querySelectorAll(".with-db"), function(comp) {
             comp.classList.toggle("hidden", !show);
         });
-        _.each(document.querySelectorAll(".without-db"), function(comp) {
+        _.each(document.querySelectorAll(".without-db, .with-ticket"), function(comp) {
             comp.classList.toggle("hidden", show);
         });
     }
 
+    function showWithTicket(show) {
+        _.each(document.querySelectorAll(".with-ticket"), function(comp) {
+            comp.classList.toggle("hidden", !show);
+        });
+        _.each(document.querySelectorAll(".without-db, .with-db"), function(comp) {
+            comp.classList.toggle("hidden", show);
+        });
+    }
+
+    function hashIsTicket() {
+        return window.location.hash.match(/^#[a-z0-9-]+$/);
+    }
+
     function hasDB() {
-        loadLunrIndex().then(function() {
-            restoreInitialState();
-            refreshCounters();
-            refreshTotalMissed().then(function() {
+        if (hashIsTicket()) {
+            showWithTicket(true);
+            showTicket(window.location.hash.substring(1)).then(function() {
                 showSpinner(false);
             });
-            //getMissed().then(function(missed) {
-            //    document.getElementById("missed-count").textContent = missed.length;
-            //    showSpinner(false);
-            //});
-            setInterval(function() {
-                fetchNewTickets().then(function(newCounts) {
-                    var cnt = _.sum(newCounts);
-                    if (cnt) {
-                        document.getElementById("new-msg").classList.remove("hidden");
-                        document.getElementById("new-count").textContent = cnt;
-                    }
+        } else {
+            showWithDB(true);
+            loadLunrIndex().then(function() {
+                restoreInitialState();
+                refreshCounters();
+                refreshTotalMissed().then(function() {
+                    showSpinner(false);
                 });
-            }, 60000);
-        });
-
+                //getMissed().then(function(missed) {
+                //    document.getElementById("missed-count").textContent = missed.length;
+                //    showSpinner(false);
+                //});
+                setInterval(function() {
+                    fetchNewTickets().then(function(newCounts) {
+                        var cnt = _.sum(newCounts);
+                        if (cnt) {
+                            document.getElementById("new-msg").classList.remove("hidden");
+                            document.getElementById("new-count").textContent = cnt;
+                        }
+                    });
+                }, 60000);
+            });
+        }
     }
 
     function restoreInitialState() {
@@ -749,10 +770,16 @@ function main() {
         console.log("popstate", e, e.state);
         if (e.state) {
             state = e.state;
+            applyState(state);
+            showWithDB(true);
         } else {
             state = defaultState();
-            console.log("default state", state);
-            applyState(state);
+            console.log("default state", state, lunrIndex);
+            if (lunrIndex.tickets) {
+                hasDB();
+            } else {
+                init();
+            }
         }
     });
 
@@ -850,28 +877,53 @@ function main() {
     }
 
     function loadLunrIndex() {
-        return Promise.all(["index.tickets", "index.oldTickets"].map(stats.getAny.bind(stats)))
-            .then(function(multiRes) {
-                multiRes.forEach(function(res) {
-                    if (res.data) {
-                        var i = createLunr();
-                        i = lunr.Index.load(JSON.parse(res.data.data));
-                        lunrIndex[res.data.id.substring("index.".length)] = i;
-                    }
+        if (lunrIndex["tickets"]) {
+            console.log("already loaded", Object.keys(lunrIndex), "LunrIndexes");
+            return Promise.resolve(true);
+        } else {
+            return Promise.all(["index.tickets", "index.oldTickets"].map(stats.getAny.bind(stats)))
+                .then(function(multiRes) {
+                    multiRes.forEach(function(res) {
+                        if (res.data) {
+                            var i = createLunr();
+                            i = lunr.Index.load(JSON.parse(res.data.data));
+                            lunrIndex[res.data.id.substring("index.".length)] = i;
+                        }
+                    });
+                    console.log("loaded", Object.keys(lunrIndex), "LunrIndexes");
                 });
-                console.log("loaded", Object.keys(lunrIndex), "LunrIndexes");
-            });
+        }
     }
 
-    tickets.db.getLastModified().then(function(res) {
-        showWithDB(res);
-        if (res) {
-            hasDB();
-        } else {
-            stats.clear();
-            noDBPane();
-        }
-    });
+    function showTicket(id) {
+        console.log("showTicket(", id, ")");
+        return tickets.get(id).then(function(res) {
+            var ticket = res.data;
+            document.getElementById("tracker-label").textContent = ticket.tracker_label;
+            var header = document.getElementById("ticket-num");
+            header.textContent = ticket.ticket_num + " - " + ticket.summary;
+            header.setAttribute("href", "#" + id);
+            var contents = renderDetails(ticket);
+            document.getElementById("ticket-contents").innerHTML = "";
+            document.getElementById("ticket-contents").appendChild(contents);
+        }).catch(function() {
+            document.getElementById("ticket-not-found").classList.remove("hidden");
+            document.getElementById("ticket-not-found").innerHTML = "<p>ticket <b>" + encodeURIComponent(id) + "</b> not found</p>";
+        });
+    }
+
+    function init() {
+        tickets.db.getLastModified().then(function(res) {
+            if (res) {
+                hasDB();
+            } else {
+                showWithDB(false);
+                stats.clear();
+                noDBPane();
+            }
+        });
+    }
+    init();
 
 }
 
