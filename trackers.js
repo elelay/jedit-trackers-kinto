@@ -183,7 +183,9 @@ function main() {
         var activeTrackers = Object.keys(state.activeCounters);
         var all = state.all;
         var missed = state.missed;
-        console.log("searching for", filter, "in", (missed && "MISSED") ||  (all && "ALL") || activeTrackers);
+        var qTitle = [(filter||"every ticket"), "in", (missed && "MISSED") ||  (all && "ALL") || activeTrackers].join(" ");
+        console.log("searching for", qTitle);
+        document.title = "jEdit Trackers - " + qTitle;
         var results;
         var includeOld = all && !activeTrackers.length && !missed;
 
@@ -243,21 +245,6 @@ function main() {
         const oldish = moment(ticket.created_date).isSameOrBefore(oldishDate);
         const open = ticket.status === "open";
         return no_answer && oldish;
-    }
-
-    function getMissed() {
-        return tickets.list({
-                filters: {
-                    status: "open"
-                }
-            })
-            .then(function(res) {
-                console.log(res.data[0]);
-                // Filter tickets according to their summary
-                var match = res.data.filter(filterByMissed);
-                console.log("match missed", match.length);
-                return match;
-            })
     }
 
     function handleConflicts(coll, conflicts) {
@@ -905,9 +892,11 @@ function main() {
         console.log("showTicket(", id, ")");
         return tickets.get(id).then(function(res) {
             var ticket = res.data;
+            var headText = ticket.ticket_num + " - " + ticket.summary;
+            document.title = "jEdit Trackers - " + ticket.tracker_label + " #"+ headText;
             document.getElementById("tracker-label").textContent = ticket.tracker_label;
             var header = document.getElementById("ticket-num");
-            header.textContent = ticket.ticket_num + " - " + ticket.summary;
+            header.textContent = headText;
             header.setAttribute("href", "#" + id);
             var contents = renderDetails(ticket);
             document.getElementById("ticket-contents").innerHTML = "";
