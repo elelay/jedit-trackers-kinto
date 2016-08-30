@@ -680,6 +680,7 @@ function main() {
     }
 
     function noDBPane() {
+            document.getElementById("initial-fetch").setAttribute("disabled", "disabled");
         fetchTicketsCount().then(function([count, oldCount]) {
             document.getElementById("remote-tickets-count").textContent = count;
             document.getElementById("old-tickets-count").textContent = oldCount;
@@ -700,20 +701,23 @@ function main() {
     }
 
     function showWithDB(show) {
-        _.each(document.querySelectorAll(".with-db"), function(comp) {
+        _.each(document.querySelectorAll(".with-db, .with-ticket"), function(comp) {
             comp.classList.toggle("hidden", !show);
         });
-        _.each(document.querySelectorAll(".without-db, .with-ticket"), function(comp) {
+        _.each(document.querySelectorAll(".without-db"), function(comp) {
             comp.classList.toggle("hidden", show);
+        });
+        _.each(document.querySelectorAll(".with-ticket"), function(comp) {
+            comp.classList.toggle("hidden", true);
         });
     }
 
-    function showWithTicket(show) {
+    function showWithTicket() {
         _.each(document.querySelectorAll(".with-ticket"), function(comp) {
-            comp.classList.toggle("hidden", !show);
+            comp.classList.toggle("hidden", false);
         });
         _.each(document.querySelectorAll(".without-db, .with-db"), function(comp) {
-            comp.classList.toggle("hidden", show);
+            comp.classList.toggle("hidden", true);
         });
     }
 
