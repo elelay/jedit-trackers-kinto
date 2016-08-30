@@ -18,8 +18,19 @@ const nopSchema = {
     }
 };
 
+const server = "http://kinto.elelay.fr";
+const bucket = "jedit-trackers";
+const token = "helo";
+
 function main() {
-    db = new Kinto();
+    db = new Kinto({
+        remote: server + "/v1",
+        headers: {
+            Authorization: "Basic " + btoa("token:" + token)
+        },
+        bucket: bucket,
+        timeout: 30000
+    });
     tickets = db.collection("tickets", {
         idSchema: nopSchema
     });
@@ -117,12 +128,7 @@ function main() {
             document.getElementById("search").value = "";
         });
 
-    var syncOptions = {
-        remote: "http://localhost:8888/v1",
-        headers: {
-            Authorization: "Basic " + btoa("token:tr0ub4d@ur")
-        }
-    };
+    var syncOptions = {};
 
     function filterByTrackers(active) {
         if (active && active.length) {
@@ -729,10 +735,6 @@ function main() {
                 refreshTotalMissed().then(function() {
                     showSpinner(false);
                 });
-                //getMissed().then(function(missed) {
-                //    document.getElementById("missed-count").textContent = missed.length;
-                //    showSpinner(false);
-                //});
                 setInterval(function() {
                     fetchNewTickets().then(function(newCounts) {
                         var cnt = _.sum(newCounts);
