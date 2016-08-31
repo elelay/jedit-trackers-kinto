@@ -31,7 +31,7 @@ It seems interesting:
 
 ## Server
 
-A kinto server is running at http://kinto.elelay.fr. I'm still in the process of setting it up.
+A kinto server is running at https://kinto.elelay.fr. I'm still in the process of setting it up.
 It's running in docker behind an nginx proxy.
 
 I've followed [the permission tutorial](http://kinto.readthedocs.io/en/stable/tutorials/permissions.html) to make
@@ -39,7 +39,7 @@ I've followed [the permission tutorial](http://kinto.readthedocs.io/en/stable/tu
 
 ## Client
 
-A working application is at http://trackers.elelay.fr/trackers.html
+A working application is at https://trackers.elelay.fr/trackers.html
 
 It will let you download and browse tickets in a table.
 
