@@ -32,7 +32,7 @@ It seems interesting:
 ## Server
 
 A kinto server is running at http://kinto.elelay.fr. I'm still in the process of setting it up.
-It's running in docker behind an nginx proxy. First thing is to switch to https.
+It's running in docker behind an nginx proxy.
 
 I've followed [the permission tutorial](http://kinto.readthedocs.io/en/stable/tutorials/permissions.html) to make
 2 read-only collections in the `jedit-trackers` bucket (`tickets` and `oldTickets`).

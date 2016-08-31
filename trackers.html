@@ -85,8 +85,7 @@
         <p><b>Hi there!</b>
         Seems like the local database is empty. Would you like to get <em><span id="remote-tickets-count">some</span></em>
         tickets from the server? </p>
-        <p>You can also include old (closed before Jan. 2016) tickets, but it makes a bigger fetch and you'll need at least 700MB free
-        in your user directory otherwise your browser will refuse to create the DB.</p>
+        <p>You can also include old (closed before Jan. 2016) tickets, but it makes a bigger fetch and slower app all-around.</p>
         <div class="form form-inline">
             <div class="checkbox">
                 <label>
@@ -175,9 +174,9 @@
   <script src="bower_components/datatables.net/js/jquery.dataTables.js"></script>
   <script src="bower_components/datatables.net-bs/js/dataTables.bootstrap.js"></script>
   <script src="bower_components/lunr.js/lunr.js"></script>
-  <script src="//npmcdn.com/kinto@4.0.2/dist/kinto.js"
-            integrity="sha384-MUdIR7pARxZVGjSznOFL4DwubWEYfRb//ChmClWFQs5TQpO52dOjRp5sHL7LhMRN"
-            crossorigin="anonymous">
+  <script src="//unpkg.com/kinto@4.0.3/dist/kinto.js"
+          integrity="sha384-SsHILufiBmKVFtsuyZpCaZt9Ip6xypM8fje3s0x3MXLMgl/yQjT8YtNInVAsmZjc"
+          crossorigin="anonymous">
   </script>
   <script src="trackers.js"></script>
 </body>

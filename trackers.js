@@ -18,7 +18,7 @@ const nopSchema = {
     }
 };
 
-const server = "http://kinto.elelay.fr";
+const server = "https://kinto.elelay.fr";
 const bucket = "jedit-trackers";
 const token = "helo";
 
