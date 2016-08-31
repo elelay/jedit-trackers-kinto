@@ -77,13 +77,14 @@ I'll run `updater.py` on the kinto server, polling every 5 minutes for changes i
 I want to let users write to tickets: ATM they simply fetch a read-only DB, and kinto can do more. Maybe not write to
 the tickets per se, but maintain a user collection with stars, tags, etc..
 
-I initially wanted to apply changes in Sourceforge from forms in the application, using the API, but there's a
-[pending issue](https://sourceforge.net/p/forge/site-support/13403/) preventing from using the Sourceforge REST API via
-XMLHTTPRequest. Also it's a lot of work to create forms and the like.
+I initially wanted to apply changes in Sourceforge from forms in the application, using the
+ [REST API](https://anypoint.mulesoft.com/apiplatform/sourceforge/#/portals/organizations/98f11a03-7ec0-4a34-b001-c1ca0e0c45b1/apis/32951/versions/34322)
+and XMLHTTPRequests. But it's a lot of work to create forms and the like.
 
 I envisioned these changes would be stored in a separate collection and applied when network would be available. The
-user would have to login using Sourceforge's [oauth flow](. Apparently it's not a good idea to do it client side because
-the application secret token is leaked to everybody. Maybe use the bearer token for now.
+user would have to login using Sourceforge's [oauth flow](https://sourceforge.net/p/forge/documentation/Allura%20API/?version=20).
+Apparently it's not a good idea to do it client side because the application secret token is leaked to everybody.
+Maybe use the bearer token for now.
 
 The interface is not ugly (I think), but feels clunky.
 
@@ -101,3 +102,5 @@ load and save. I'm in two minds about that: expand the index by feeding it every
 
 Indexes are not available yet. They could help make some queries quicker (like missed tickets). I'm considering saving
 indexes myself in the stats collection (for instance a document with all ticket ids by num).
+
+Full-text indexing is a good fit for a webworker. I'll have to look into that...
