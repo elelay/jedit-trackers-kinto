@@ -199,7 +199,7 @@ function main() {
         } else if (filter.match(/^#\d+/)) {
             var byNum = {
                 filters: {
-                    ticket_num: parseInt(filter.substring(1))
+                    ticket_num: parseInt(filter.substring(1), 10)
                 }
             };
 
@@ -749,6 +749,7 @@ function main() {
                 state = JSON.parse(decodeURIComponent(window.location.hash.substring(1)));
             } catch (e) {
                 console.log("invalid state in hash", window.location.hash);
+                state = defaultState();
             }
             console.log("restoring state from hash", state);
             applyState(state);
@@ -787,7 +788,7 @@ function main() {
             raw: true
         }).then(function(res) {
             console.log("RES", res);
-            return parseInt(res.headers.get("total-records"));
+            return parseInt(res.headers.get("total-records"), 10);
         });
     }
 
