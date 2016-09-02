@@ -81,14 +81,55 @@ function split(arr, test) {
     ]);
 }
 
+function countAttchmts(obj) {
+    var total = obj.attachments.reduce(function(acc, attach) {
+        return acc + attach.bytes;
+    }, 0);
+    if (obj.discussion_thread && obj.discussion_thread.posts) {
+        total += obj.discussion_thread.posts.reduce(function(acc, post) {
+            return acc + countAttchmts(post);
+        }, 0);
+    }
+    return total;
+}
+
+function transformAndCountAttchmnts(objs) {
+    objs.slice(0, 1).forEach(function(obj) {
+        var tickets = transformOne(obj);
+        var splitTickets = split(tickets, function(ticket) {
+            const open = (ticket.status.indexOf("open") === 0) || (ticket.status.indexOf("pending") === 0);
+            const thisYear = (ticket.created_date.indexOf("2016") === 0) ||
+                (ticket.mod_date.indexOf("2016") === 0);
+            return open || thisYear;
+        });
+
+
+        const assign = {
+            tickets: splitTickets[0],
+            oldTickets: splitTickets[1]
+        };
+
+        Object.keys(assign).forEach(function(collection) {
+            var tickets = assign[collection];
+            if (tickets.length) {
+                const total = tickets.reduce(function(acc, ticket) {
+                    return acc + countAttchmts(ticket);
+                }, 0);
+                console.log(collection, "attachments:", total);
+            }
+        });
+    });
+    return Promise.resolve("OK");
+}
+
 var stats = {};
 var statsCnt = 0;
 var statsTotal = 0;
 
-function transform(objs) {
+function transformAndPut(objs) {
     var inserts = [];
     //var ticketIds = {};
-    objs/*.slice(0,1)*/.forEach(function(obj) {
+    objs /*.slice(0,1)*/ .forEach(function(obj) {
         var tickets = transformOne(obj);
         var splitTickets = split(tickets, function(ticket) {
             const open = (ticket.status.indexOf("open") === 0) || (ticket.status.indexOf("pending") === 0);
@@ -233,7 +274,7 @@ fs.readdir(exportDir, function(err, files) {
         console.error("E: Reading " + exportDir + ": " + err);
         process.exit(-1);
     } else {
-        Promise.all(files.map(load)).then(transform).catch(function(err) {
+        Promise.all(files.map(load)).then(transformAndPut).catch(function(err) {
             console.error("E: ", err);
         });
     }
