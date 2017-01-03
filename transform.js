@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const request = require("request");
-const server = "http://kinto.elelay.fr";
+const server = "https://kinto.elelay.fr";
 const bucket = "jedit-trackers";
 //request.debug = true;
 
@@ -125,11 +125,12 @@ function transformAndCountAttchmnts(objs) {
 var stats = {};
 var statsCnt = 0;
 var statsTotal = 0;
+var giveUp = false;
 
 function transformAndPut(objs) {
-    var inserts = [];
+    var inserts = [ensureBucket()];
     //var ticketIds = {};
-    objs /*.slice(0,1)*/ .forEach(function(obj) {
+    objs./*slice(1,2).*/forEach(function(obj) {
         var tickets = transformOne(obj);
         var splitTickets = split(tickets, function(ticket) {
             const open = (ticket.status.indexOf("open") === 0) || (ticket.status.indexOf("pending") === 0);
@@ -155,6 +156,7 @@ function transformAndPut(objs) {
         statsTotal += tickets.length;
 
         Object.keys(assign).forEach(function(collection) {
+			inserts.push(ensureCollection(collection));
             var tickets = assign[collection];
             if (tickets.length) {
                 const tracker = tickets[0] && tickets[0].tracker_label;
@@ -178,6 +180,8 @@ function transformAndPut(objs) {
         console.log("=================================");
         if (statsCnt === statsTotal) {
             process.exit(0);
+        } else if(giveUp){
+        	process.exit(1);
         }
     }, 5000);
 
@@ -191,6 +195,9 @@ function serialize(promises) {
         var promise = promises.shift();
         return promise().then(function() {
             serialize(promises);
+        }).catch(function(e){
+        	console.error("E: " + e);
+        	giveUp = true;
         });
     } else {
         return Promise.resolve("OK");
@@ -253,6 +260,120 @@ function put(i, label, collection, tickets) {
             });
         };
     }
+}
+
+function ensureBucket() {
+return function() {
+return new Promise(function(resolve, reject) {
+	var uriBase = server + "/v1/buckets";
+	console.log("D: ensuring bucket", bucket, "exists");
+	request({
+			method: "GET",
+			uri: uriBase + "/" + bucket,
+			auth: {
+				user: "token",
+				pass: token
+			}
+		}, function(err, response) {
+			if(!err) {
+				if(response.statusCode == 200) {
+					resolve();
+				} else if((response.statusCode == 404) || (response.statusCode == 403)) {
+					var req = {
+						method: "POST",
+						uri: uriBase,
+						auth: {
+							user: "token",
+							pass: token
+						},
+						body: {
+							data: {
+								id: bucket
+							},
+							permissions: {
+								read: ["system.Everyone"]
+							}
+						},
+						json: true
+					};
+					request(req, function(err, res, body) {
+							if (err) {
+								reject(err);
+							} else {
+								console.log("D: status ensuring bucket", bucket, "=", res.statusCode);
+								if (res.statusCode == 201) {
+									resolve();
+								} else {
+									reject("failed crearing bucket: " + res.statusCode);
+								}
+							}
+					});
+				} else {
+					reject("retrieving " + uri + ": code: "+ response.statusCode);
+				}
+			} else {
+				reject(err);
+			}
+	});
+});
+};
+}
+
+function ensureCollection(collection) {
+return function() {
+return new Promise(function(resolve, reject) {
+	var uriBase = server + "/v1/buckets/" + bucket + "/collections";
+	console.log("D: ensuring collection", collection, "exists in bucket", bucket);
+	request({
+			method: "GET",
+			uri: uriBase + "/" + collection,
+			auth: {
+				user: "token",
+				pass: token
+			}
+		}, function(err, response) {
+			if(!err) {
+				if(response.statusCode == 200) {
+					resolve();
+				} else if(response.statusCode == 404) {
+					var req = {
+						method: "POST",
+						uri: uriBase,
+						auth: {
+							user: "token",
+							pass: token
+						},
+						body: {
+							data: {
+								id: collection
+							},
+							permissions: {
+								read: ["system.Everyone"]
+							}
+						},
+						json: true
+					};
+					request(req, function(err, res, body) {
+							if (err) {
+								reject(err);
+							} else {
+								console.log("D: status ensuring collection", collection, "=", res.statusCode);
+								if (res.statusCode == 201) {
+									resolve();
+								} else {
+									reject("failed creating collection " + collection + ": " + res.statusCode);
+								}
+							}
+					});
+				} else {
+					reject("retrieving " + uri + ": code: "+ response.statusCode);
+				}
+			} else {
+				reject(err);
+			}
+	});
+});
+};
 }
 
 function save(res) {

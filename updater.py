@@ -24,6 +24,9 @@ print("Updating %s/v1/buckets/%s" % (server, bucket))
 client = Client(server_url= server + "/v1",
                 auth=('token', token))
 
+client.create_bucket(bucket, if_not_exists=True)
+client.create_collection('updater', bucket=bucket, if_not_exists=True)
+
 rt = requests.get("https://sourceforge.net/rest/p/jedit/")
 jsont = rt.json()
 trackers = [tool for tool in jsont['tools'] if tool['name'] == 'tickets']
@@ -62,5 +65,5 @@ for tool in trackers:
 
 last_updater['data']['last_date'] = now_date
 # comment to disable update while testing
-client.update_record(last_updater['data'], collection='updater')
+client.update_record(last_updater['data'], bucket=bucket, collection='updater')
 print("DONE")
