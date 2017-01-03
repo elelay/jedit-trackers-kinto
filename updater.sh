@@ -10,4 +10,4 @@ shift
 
 mydir=$(dirname $(realpath $0))
 . "$venv/bin/activate"
-python "$mydir"/updater.py $*
+python "$mydir"/updater.py $* >> "$mydir/updater.log"
