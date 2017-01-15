@@ -1,2 +1,5 @@
 requests==2.10
-kinto-http==6.1.0
+kinto-http==7.0.0
+socketIO-client==0.7.2
+python-socketio==1.6.2
+IMAPClient==1.0.2

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+</head>
+<body>
+<ul id="log" style="list-style:none">
+</ul>
+</body>
+<script src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
+<script type="text/javascript">
+ //var socket = io('http://localhost:8000');
+ var socket = io('https://trackers.elelay.fr');
+  socket.on('ticket', function (data) {
+    console.log(data);
+    var ticket = data.tracker + " #" + data.number;
+    var en = document.createElement("li");
+    en.append(document.createTextNode(new Date() + ": " + ticket));
+    document.getElementById("log").append(en);
+  });
+</script>
+</html>
