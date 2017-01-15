@@ -70,7 +70,14 @@ It doesn't use any particular client framework, and the code grew organically to
 
 ## Updates
 
-I'll run `updater.py` on the kinto server, polling every 5 minutes for changes in Sourceforge trackers.
+ - I subscribed to jEdit-devel mailing list via a dedicated address and monitor ticket-related mail notifications
+in `imap_socketio.py`;
+ - it publishes ticket events via a socket.io endpoint.
+ - `socketio_updater.py` then subscribes to this websocket and fetches and update tickets in the Kinto database.
+I get almost real-time updates when sending test emails to the monitoring address. We'll see how it fares with real SF
+notifications.
+
+I run `updater.py` on the kinto server, polling every day for changes in Sourceforge trackers in case of missed updates.
 
 # 3. Improvements
 
